@@ -14,21 +14,21 @@ const fh = new FileHandler()
 
 const RTSPRecorder = class {
   constructor(config = {}) {
-    this.config = config
-    this.name = config.name
-    this.url = config.url
-    this.timeLimit = config.timeLimit || 60
-    this.folder = config.folder || 'media/'
-    this.categoryType = config.type || 'video'
-    this.directoryPathFormat = config.directoryPathFormat || 'MMM-Do-YY'
-    this.fileNameFormat = config.fileNameFormat || 'YYYY-M-D-h-mm-ss'
-    this.audioCodec = config.audioCodec || 'copy'
-    fh.createDirIfNotExists(this.getDirectoryPath())
-    fh.createDirIfNotExists(this.getTodayPath())
+    this.config = config;
+    this.stationName = config.stationName;
+    this.subtitleText = config.subtitleText || '';
+    this.url = config.url;
+    this.timeLimit = config.timeLimit || 60;
+    this.folder = config.folder || 'media/';
+    this.categoryType = config.type || 'video';
+    this.directoryPathFormat = config.directoryPathFormat || 'MMM-Do-YY';
+    this.fileNameFormat = config.fileNameFormat || 'YYYY-M-D-h-mm-ss';
+    fh.createDirIfNotExists(this.getDirectoryPath());
+    fh.createDirIfNotExists(this.getTodayPath());
   }
 
   getDirectoryPath() {
-    return path.join(this.folder, (this.name ? this.name : ''))
+    return path.join(this.folder, (this.stationName ? this.stationName : ''));
   }
 
   getTodayPath() {
@@ -51,31 +51,56 @@ const RTSPRecorder = class {
       return '.jpg'
     }
 
-    return '.mp4'
+    return '.mkv'
   }
 
+  // getArguments() {
+  //   var args = [];
+  //   if (this.categoryType === 'audio') {
+  //     args = ['-vn', '-acodec', 'copy'];
+  //   } else if (this.categoryType === 'image') {
+  //     args = ['-vframes', '1'];
+  //   } else {
+  //     args = ['-acodec', 'copy', '-vcodec', 'copy'];
+  //     // 자막 텍스트 추가
+  //     if (this.subtitleText) {
+  //       args.push('-vf', `drawtext=text='${this.subtitleText}':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`);
+  //     }
+  //   }
+  //   return args;
+  // }
   getArguments() {
+    var args = [];
     if (this.categoryType === 'audio') {
-      return ['-vn', '-acodec', 'copy']
+      args = ['-vn', '-acodec', 'copy'];
+    } else if (this.categoryType === 'image') {
+      args = ['-vframes', '1'];
+    } else {
+      // 재인코딩을 위해 코덱 옵션을 변경합니다.
+      args = ['-acodec', 'aac', '-vcodec', 'libx264'];
+      if (this.subtitleText) {
+        args.push('-vf', `drawtext=fontfile=LSANS.TTF:text='${this.subtitleText}':fontcolor=red:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2`);
+      }
     }
-    if (this.categoryType === 'image') {
-      return ['-vframes', '1']
-    }
-    return ['-acodec', this.audioCodec, '-vcodec', 'copy']
+    return args;
   }
 
   getChildProcess(fileName) {
-    var args = ['-i', this.url]
-    const mediaArgs = this.getArguments()
+    console.log(this.url);
+    // TCP 전송 프로토콜을 사용하도록 인자 추가
+    var args = ['-rtsp_transport', 'tcp', '-i', this.url];
+    const mediaArgs = this.getArguments();
     mediaArgs.forEach((item) => {
-      args.push(item)
-    })
-    args.push(fileName)
-    return childProcess.spawn('ffmpeg',
-      args,
-      { detached: false, stdio: 'ignore' })
-  }
+        args.push(item);
+    });
+    args.push(fileName);
 
+    console.log(args);
+
+    const ffmpegProcess = childProcess.spawn('ffmpeg', args, { detached: false, stdio: 'inherit' });
+
+    return ffmpegProcess;
+}
   stopRecording() {
     this.disableStreaming = true
     if (this.timer) {
